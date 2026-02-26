@@ -1,36 +1,137 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Resume Matcher
 
-## Getting Started
+AI-powered resume matching app built with Next.js + Mastra.
 
-First, run the development server:
+It:
+- Parses a raw job posting into structured JSON.
+- Uploads and parses PDF resumes.
+- Structures resume text with a Mastra agent.
+- Scores resumes against the job posting.
+
+## Tech Stack
+
+- Next.js 16 (App Router)
+- TypeScript
+- Mastra (`@mastra/core`)
+- Anthropic via AI SDK (`@ai-sdk/anthropic`)
+- `unpdf` for PDF text extraction
+
+## Screenshots
+
+Add your screenshots to `docs/screenshots/` and replace these placeholders:
+
+![Home page placeholder](docs/screenshots/01-home.png)
+![Upload page placeholder](docs/screenshots/02-upload.png)
+![Results page placeholder](docs/screenshots/03-results.png)
+![API/JSON output placeholder](docs/screenshots/04-json-output.png)
+
+## Local Setup
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Create `.env.local`:
+
+```bash
+ANTHROPIC_API_KEY=your_key_here
+```
+
+3. Run the app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+4. Open:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+`http://localhost:3000`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## App Flow
 
-## Learn More
+1. Paste job posting on `/`:
+   - Calls `POST /api/parse`
+   - Uses `jobParserAgent`
+2. Upload resumes on `/upload`:
+   - Calls `POST /api/resumes/upload`
+   - Extracts text from PDF (`unpdf`)
+   - Structures resume text via `resumeStructurerAgent`
+   - Persists parsed data to `resumes/parsed-resumes.json`
+3. Score resumes:
+   - Calls `POST /api/score`
+   - Uses `resumeScorerAgent`
+   - Returns sorted match scores and best match
 
-To learn more about Next.js, take a look at the following resources:
+## API Endpoints
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `POST /api/parse`  
+  Input: `{ jobPostingText: string }`  
+  Output: structured job posting JSON.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `GET /api/resumes`  
+  Lists uploaded PDF files in `resumes/`.
 
-## Deploy on Vercel
+- `POST /api/resumes/upload`  
+  Multipart upload with field `resume` (PDF).  
+  Returns uploaded file metadata + structured resume output.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `POST /api/score`  
+  Accepts either:
+  - `{ jobPosting, resumeIds[], threshold? }`
+  - `{ jobPosting, resumes: [{ id, text }], threshold? }`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Scripts
+
+- Start dev server:
+
+```bash
+npm run dev
+```
+
+- Build:
+
+```bash
+npm run build
+```
+
+- Lint:
+
+```bash
+npm run lint
+```
+
+- Manual scoring test (dev server must be running):
+
+```bash
+npx tsx scripts/test-score-resumes.ts
+```
+
+## Project Structure
+
+```text
+src/
+  app/
+    api/
+      parse/route.ts
+      resumes/route.ts
+      resumes/upload/route.ts
+      score/route.ts
+  lib/
+    mastra/
+      agents/
+        jobParserAgent.ts
+        resumeStructurerAgent.ts
+        resumeScorerAgent.ts
+    resumes/storage.ts
+  types/
+    jobPosting.ts
+    structuredResume.ts
+    resumeScore.ts
+```
+
+## Notes
+
+- Uploaded PDFs and parsed outputs are stored locally in `resumes/`.
+- Do not commit sensitive resume data in public repos.
