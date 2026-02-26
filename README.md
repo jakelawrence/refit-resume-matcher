@@ -18,12 +18,17 @@ It:
 
 ## Screenshots
 
-Add your screenshots to `docs/screenshots/` and replace these placeholders:
+### Home (Job Posting Input)
+![Home page](docs/screenshots/01-home.png)
 
-![Home page placeholder](docs/screenshots/01-home.png)
-![Upload page placeholder](docs/screenshots/02-upload.png)
-![Results page placeholder](docs/screenshots/03-results.png)
-![API/JSON output placeholder](docs/screenshots/04-json-output.png)
+### Upload (Resume Upload + Selection)
+![Upload page](docs/screenshots/02-upload.png)
+
+### Results (Scoring Output UI)
+![Results page](docs/screenshots/03-results.png)
+
+### JSON Output (API Response)
+![JSON output](docs/screenshots/04-json-output.png)
 
 ## Local Setup
 
