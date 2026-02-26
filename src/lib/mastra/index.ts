@@ -1,6 +1,7 @@
 import { Mastra } from "@mastra/core";
 import { jobParserAgent } from "./agents/jobParserAgent";
 import { resumeScorerAgent } from "./agents/resumeScorerAgent";
+import { resumeStructurerAgent } from "./agents/resumeStructurerAgent";
 
 /**
  * Mastra instance
@@ -15,6 +16,7 @@ export const mastra = new Mastra({
   agents: {
     jobParserAgent,
     resumeScorerAgent,
+    resumeStructurerAgent,
     // resumeWriterAgent,  ← add in Step 3
   },
 });
