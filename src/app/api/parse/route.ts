@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseJobPosting } from "@/lib/mastra/agents/jobParserAgent";
 import { validateJobPostingText } from "@/lib/validation/inputGuards";
+import { requireAnthropicApiKey } from "@/lib/api/preflight";
 
 /**
  * POST /api/parse
@@ -16,6 +17,9 @@ import { validateJobPostingText } from "@/lib/validation/inputGuards";
  */
 export async function POST(req: NextRequest) {
   try {
+    const apiKeyError = requireAnthropicApiKey();
+    if (apiKeyError) return apiKeyError;
+
     const body = await req.json();
     const { jobPostingText } = body;
 

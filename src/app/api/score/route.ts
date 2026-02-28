@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import { extractPdfText, getParsedResumeById, RESUMES_DIR } from "@/lib/resumes/storage";
 import { validateResumeText } from "@/lib/validation/inputGuards";
+import { requireAnthropicApiKey } from "@/lib/api/preflight";
 
 export const runtime = "nodejs";
 
@@ -91,6 +92,9 @@ function normalizeScoringResult(result: ScorerOutput, threshold: number): Scorer
  */
 export async function POST(req: NextRequest) {
   try {
+    const apiKeyError = requireAnthropicApiKey();
+    if (apiKeyError) return apiKeyError;
+
     const body = await req.json();
     const { jobPosting, resumeIds, resumes: rawResumes, threshold = 70 } = body;
 

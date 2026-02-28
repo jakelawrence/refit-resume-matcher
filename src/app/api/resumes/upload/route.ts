@@ -4,6 +4,7 @@ import path from "path";
 import { ensureResumesDir, extractPdfText, RESUMES_DIR, upsertParsedResume } from "@/lib/resumes/storage";
 import { parseResumeToStructured } from "@/lib/mastra/agents/resumeStructurerAgent";
 import { validateResumeText } from "@/lib/validation/inputGuards";
+import { requireAnthropicApiKey } from "@/lib/api/preflight";
 
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
@@ -11,6 +12,9 @@ export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
+    const apiKeyError = requireAnthropicApiKey();
+    if (apiKeyError) return apiKeyError;
+
     console.log("[upload] Received upload request");
     ensureResumesDir();
 
