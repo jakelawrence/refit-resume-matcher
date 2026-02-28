@@ -1,7 +1,7 @@
 /**
  * test-parse-job.ts
  *
- * Run this script to test the /api/parse-job endpoint against a real job listing.
+ * Run this script to test the /api/parse endpoint against a real job listing.
  *
  * Usage (with your dev server running on port 3000):
  *   npx tsx scripts/test-parse-job.ts
@@ -9,7 +9,7 @@
  * To test a different listing, replace the JOB_POSTING string below.
  */
 
-const PARSE_API_URL = "http://localhost:3000/api/analyze";
+const PARSE_API_URL = "http://localhost:3000/api/parse";
 
 // ─── Paste any real job listing here ─────────────────────────────────────────
 
