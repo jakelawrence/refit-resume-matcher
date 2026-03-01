@@ -338,10 +338,10 @@ export default function ResultsPage() {
       <div className="layout">
         {/* Header */}
         <header className="header">
-          <div className="wordmark" onClick={() => router.push("/")} role="button" tabIndex={0}>
+          <button type="button" className="wordmark" onClick={() => router.push("/")} aria-label="Go to home">
             <span className="wordmark-re">re</span>
             <span className="wordmark-fit">fit</span>
-          </div>
+          </button>
           <p className="tagline">Resume intelligence, tailored to the job.</p>
         </header>
 
@@ -517,6 +517,9 @@ export default function ResultsPage() {
           font-family: var(--serif); font-size: 42px; font-weight: 700;
           letter-spacing: -1px; line-height: 1; cursor: pointer;
           display: inline-flex;
+          background: transparent;
+          border: none;
+          padding: 0;
         }
         .wordmark-re  { color: var(--ink); }
         .wordmark-fit { color: var(--accent); }

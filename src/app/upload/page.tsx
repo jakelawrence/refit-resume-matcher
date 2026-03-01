@@ -183,10 +183,10 @@ export default function UploadPage() {
       <div className="layout">
         {/* Header */}
         <header className="header">
-          <div className="wordmark" onClick={() => router.push("/")} role="button" tabIndex={0}>
+          <button type="button" className="wordmark" onClick={() => router.push("/")} aria-label="Go to home">
             <span className="wordmark-re">re</span>
             <span className="wordmark-fit">fit</span>
-          </div>
+          </button>
           <p className="tagline">Resume intelligence, tailored to the job.</p>
         </header>
 
@@ -209,7 +209,9 @@ export default function UploadPage() {
         </nav>
 
         {/* Drop zone */}
-        <section
+        <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" className="hidden-input" onChange={handleFileInput} />
+        <button
+          type="button"
           className={`dropzone ${isDragging ? "dropzone--active" : ""} ${uploading ? "dropzone--uploading" : ""}`}
           onDragOver={(e) => {
             e.preventDefault();
@@ -218,13 +220,9 @@ export default function UploadPage() {
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
           onClick={() => !uploading && fileInputRef.current?.click()}
-          role="button"
-          tabIndex={0}
           aria-label="Upload résumé PDF"
-          onKeyDown={(e) => e.key === "Enter" && fileInputRef.current?.click()}
+          disabled={uploading}
         >
-          <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" className="hidden-input" onChange={handleFileInput} />
-
           <div className="dropzone-icon" aria-hidden="true">
             {uploading ? (
               <span className="spinner spinner--dark" />
@@ -242,7 +240,7 @@ export default function UploadPage() {
             <span className="dropzone-primary">{uploading ? "Uploading…" : isDragging ? "Drop to upload" : "Upload a résumé"}</span>
             <span className="dropzone-secondary">Drag & drop or click to browse · PDF only · Max 5 MB</span>
           </div>
-        </section>
+        </button>
 
         {uploadError && (
           <div className="error-banner" role="alert">
@@ -294,41 +292,40 @@ export default function UploadPage() {
                 {resumes.map((resume, i) => {
                   const isChecked = selected.has(resume.id);
                   return (
-                    <li
-                      key={resume.id}
-                      className={`resume-item ${isChecked ? "resume-item--selected" : ""}`}
-                      style={{ animationDelay: `${i * 40}ms` }}
-                      onClick={() => toggleSelect(resume.id)}
-                      role="checkbox"
-                      aria-checked={isChecked}
-                      tabIndex={0}
-                      onKeyDown={(e) => e.key === " " && toggleSelect(resume.id)}
-                    >
-                      <div className={`checkbox ${isChecked ? "checkbox--checked" : ""}`} aria-hidden="true">
-                        {isChecked && (
-                          <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-                            <polyline points="2,6 5,9 10,3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <li key={resume.id} style={{ animationDelay: `${i * 40}ms` }}>
+                      <button
+                        type="button"
+                        className={`resume-item ${isChecked ? "resume-item--selected" : ""}`}
+                        onClick={() => toggleSelect(resume.id)}
+                        aria-pressed={isChecked}
+                        aria-label={`${isChecked ? "Deselect" : "Select"} ${resume.filename} for scoring`}
+                      >
+                        <div className={`checkbox ${isChecked ? "checkbox--checked" : ""}`} aria-hidden="true">
+                          {isChecked && (
+                            <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                              <polyline points="2,6 5,9 10,3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
+                        </div>
+
+                        <div className="pdf-icon" aria-hidden="true">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                            <polyline points="14,2 14,8 20,8" />
                           </svg>
-                        )}
-                      </div>
+                        </div>
 
-                      <div className="pdf-icon" aria-hidden="true">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                          <polyline points="14,2 14,8 20,8" />
-                        </svg>
-                      </div>
+                        <div className="resume-info">
+                          <span className="resume-name">{resume.filename}</span>
+                          <span className="resume-meta">
+                            {formatBytes(resume.sizeBytes)} · Uploaded {formatDate(resume.uploadedAt)}
+                          </span>
+                        </div>
 
-                      <div className="resume-info">
-                        <span className="resume-name">{resume.filename}</span>
-                        <span className="resume-meta">
-                          {formatBytes(resume.sizeBytes)} · Uploaded {formatDate(resume.uploadedAt)}
-                        </span>
-                      </div>
-
-                      <div className={`selection-pill ${isChecked ? "selection-pill--on" : "selection-pill--off"}`}>
-                        {isChecked ? "Scoring" : "Skipped"}
-                      </div>
+                        <div className={`selection-pill ${isChecked ? "selection-pill--on" : "selection-pill--off"}`}>
+                          {isChecked ? "Scoring" : "Skipped"}
+                        </div>
+                      </button>
                     </li>
                   );
                 })}
@@ -433,6 +430,9 @@ export default function UploadPage() {
           font-family: var(--serif); font-size: 42px; font-weight: 700;
           letter-spacing: -1px; line-height: 1; cursor: pointer;
           display: inline-flex;
+          background: transparent;
+          border: none;
+          padding: 0;
         }
         .wordmark-re  { color: var(--ink); }
         .wordmark-fit { color: var(--accent); }
@@ -468,6 +468,9 @@ export default function UploadPage() {
           cursor: pointer;
           transition: all 0.2s;
           user-select: none;
+          width: 100%;
+          text-align: left;
+          border-width: 2px;
         }
         .dropzone:hover, .dropzone:focus {
           border-color: var(--accent);
@@ -571,6 +574,9 @@ export default function UploadPage() {
           transition: all 0.15s;
           background: var(--paper);
           animation: slideIn 0.3s ease both;
+          width: 100%;
+          text-align: left;
+          border-width: 1px;
         }
         .resume-item:hover { border-color: var(--ink-2); background: #fff; }
         .resume-item--selected {
