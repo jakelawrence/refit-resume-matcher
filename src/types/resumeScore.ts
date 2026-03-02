@@ -50,6 +50,19 @@ const inlineResumeScore = () =>
     matchedSkills: z.array(z.string()).describe("Required skills from the posting that were found in this resume"),
     missingSkills: z.array(z.string()).describe("Required skills from the posting that were NOT found in this resume"),
     matchedKeywords: z.array(z.string()).describe("ATS keywords from the posting found in this resume"),
+    recommendations: z
+      .object({
+        addSkills: z.array(z.string()).describe("Concrete skills to add because they are required or high-impact for this role"),
+        removeSkills: z.array(z.string()).describe("Skills to remove or de-emphasize because they are irrelevant to this role"),
+        addExperienceBullets: z
+          .array(z.string())
+          .describe("Specific bullet ideas to add that improve alignment with responsibilities, impact, or domain"),
+        removeOrTrimBullets: z
+          .array(z.string())
+          .describe("Specific existing bullets to trim/remove because they are low-relevance or too verbose for this role"),
+        summary: z.string().describe("1-2 sentence explanation tying these recommendations to the job requirements"),
+      })
+      .describe("Actionable resume-edit recommendations for this specific job"),
 
     meetsThreshold: z.boolean().describe("True if compositeScore >= the requested threshold"),
   });
@@ -65,9 +78,16 @@ export const ScorerOutputSchema = z.object({
   threshold: z.number().describe("The threshold value that was used for this scoring run"),
 });
 
+// Lean model-output schema to reduce Anthropic grammar size; workflow computes
+// bestMatch and threshold flags deterministically after scoring.
+export const ScorerModelOutputSchema = z.object({
+  scores: z.array(inlineResumeScore()).describe("Scored results for every resume before deterministic post-processing"),
+});
+
 // ─── TypeScript types ─────────────────────────────────────────────────────────
 
 export type ResumeInput = z.infer<typeof ResumeInputSchema>;
 export type ScorerInput = z.infer<typeof ScorerInputSchema>;
 export type ResumeScore = z.infer<ReturnType<typeof inlineResumeScore>>;
+export type ScorerModelOutput = z.infer<typeof ScorerModelOutputSchema>;
 export type ScorerOutput = z.infer<typeof ScorerOutputSchema>;

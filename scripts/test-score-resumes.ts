@@ -191,6 +191,11 @@ async function score_main() {
     console.log(`│  Matched Skills  : ${score.matchedSkills.join(", ") || "none"}`);
     console.log(`│  Missing Skills  : ${score.missingSkills.join(", ") || "none"}`);
     console.log(`│  Matched Keywords: ${score.matchedKeywords.join(", ") || "none"}`);
+    console.log(`│  Reco Summary    : ${score.recommendations.summary || "none"}`);
+    console.log(`│  Reco Add Skills : ${score.recommendations.addSkills.join(", ") || "none"}`);
+    console.log(`│  Reco Trim Skills: ${score.recommendations.removeSkills.join(", ") || "none"}`);
+    console.log(`│  Reco Add Bullets: ${score.recommendations.addExperienceBullets.join(" | ") || "none"}`);
+    console.log(`│  Reco Trim Bullet: ${score.recommendations.removeOrTrimBullets.join(" | ") || "none"}`);
     console.log(`└${"─".repeat(58)}`);
     console.log();
   }

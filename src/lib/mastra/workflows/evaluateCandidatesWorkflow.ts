@@ -4,7 +4,7 @@ import { parseJobPosting } from "@/lib/mastra/agents/jobParserAgent";
 import { parseResumeToStructured } from "@/lib/mastra/agents/resumeStructurerAgent";
 import { scoreResumes } from "@/lib/mastra/agents/resumeScorerAgent";
 import { JobPostingSchema } from "@/types/jobPosting";
-import { ScorerOutputSchema, ResumeInputSchema } from "@/types/resumeScore";
+import { ScorerModelOutputSchema, ScorerOutputSchema, ResumeInputSchema } from "@/types/resumeScore";
 import { StructuredResumeSchema } from "@/types/structuredResume";
 
 const SCORE_WEIGHTS = {
@@ -38,7 +38,7 @@ function recomputeCompositeScore(score: z.infer<typeof ScorerOutputSchema>["scor
   );
 }
 
-function normalizeScoringResult(result: z.infer<typeof ScorerOutputSchema>, threshold: number): z.infer<typeof ScorerOutputSchema> {
+function normalizeScoringResult(result: z.infer<typeof ScorerModelOutputSchema>, threshold: number): z.infer<typeof ScorerOutputSchema> {
   const normalizedScores = result.scores
     .map((score) => {
       const compositeScore = recomputeCompositeScore(score);
@@ -61,7 +61,6 @@ function normalizeScoringResult(result: z.infer<typeof ScorerOutputSchema>, thre
   const bestMatch = normalizedScores[0];
 
   return {
-    ...result,
     scores: normalizedScores,
     bestMatch,
     bestMatchMeetsThreshold: bestMatch.meetsThreshold,
@@ -96,7 +95,7 @@ const ScoredContextSchema = z.object({
   jobPosting: JobPostingSchema.nullable(),
   structuredResumes: ParsedResumesSchema,
   threshold: z.number(),
-  scoringResult: ScorerOutputSchema.nullable(),
+  scoringResult: ScorerModelOutputSchema.nullable(),
 });
 
 const EvaluateCandidatesWorkflowOutputSchema = z.object({

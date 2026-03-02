@@ -2,42 +2,42 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import type { JobPosting } from "@/types/jobPosting";
+import type { ResumeScore, ScorerOutput } from "@/types/resumeScore";
 
-interface ResumeScore {
-  id: string;
-  skillsMatchScore: number;
-  skillsMatchWeight: number;
-  skillsMatchReasoning: string;
-  experienceRelevanceScore: number;
-  experienceRelevanceWeight: number;
-  experienceRelevanceReasoning: string;
-  educationMatchScore: number;
-  educationMatchWeight: number;
-  educationMatchReasoning: string;
-  keywordDensityScore: number;
-  keywordDensityWeight: number;
-  keywordDensityReasoning: string;
-  compositeScore: number;
-  summary: string;
-  matchedSkills: string[];
-  missingSkills: string[];
-  matchedKeywords: string[];
-  meetsThreshold: boolean;
+type ScoringResults = ScorerOutput;
+
+interface ResumeListResponse {
+  success: boolean;
+  resumes?: Array<{
+    id: string;
+    isEditable: boolean;
+    hasLatex: boolean;
+  }>;
 }
 
-interface ScoringResults {
-  scores: ResumeScore[];
-  bestMatch: ResumeScore;
-  bestMatchMeetsThreshold: boolean;
-  threshold: number;
+interface ResumeMetadata {
+  isEditable: boolean;
+  hasLatex: boolean;
 }
 
-interface JobPosting {
-  jobTitle: string;
-  company: string | null;
-  location: string | null;
-  experienceLevel: string;
-}
+type RecommendationListKey = Exclude<keyof ResumeScore["recommendations"], "summary">;
+type SelectedRecommendationMap = Record<string, Record<string, boolean>>;
+
+const EMPTY_RECOMMENDATIONS: ResumeScore["recommendations"] = {
+  addSkills: [],
+  removeSkills: [],
+  addExperienceBullets: [],
+  removeOrTrimBullets: [],
+  summary: "",
+};
+
+const RECOMMENDATION_SECTIONS: Array<{ key: RecommendationListKey; label: string; emptyText: string }> = [
+  { key: "addSkills", label: "Add Skills", emptyText: "No high-impact skills to add." },
+  { key: "removeSkills", label: "Remove / De-Emphasize Skills", emptyText: "No low-value skills to remove." },
+  { key: "addExperienceBullets", label: "Add Experience Bullets", emptyText: "No additional bullets needed." },
+  { key: "removeOrTrimBullets", label: "Trim / Remove Existing Bullets", emptyText: "No low-relevance bullets identified." },
+];
 
 interface LatestRunStateResponse {
   success: boolean;
@@ -55,6 +55,35 @@ function parseStoredJson<T>(raw: string | null) {
   } catch {
     return null;
   }
+}
+
+function normalizeResumeScore(score: ResumeScore): ResumeScore {
+  const recommendations = (score as Partial<ResumeScore>).recommendations;
+  return {
+    ...score,
+    recommendations: {
+      addSkills: recommendations?.addSkills ?? EMPTY_RECOMMENDATIONS.addSkills,
+      removeSkills: recommendations?.removeSkills ?? EMPTY_RECOMMENDATIONS.removeSkills,
+      addExperienceBullets: recommendations?.addExperienceBullets ?? EMPTY_RECOMMENDATIONS.addExperienceBullets,
+      removeOrTrimBullets: recommendations?.removeOrTrimBullets ?? EMPTY_RECOMMENDATIONS.removeOrTrimBullets,
+      summary: recommendations?.summary ?? EMPTY_RECOMMENDATIONS.summary,
+    },
+  };
+}
+
+function normalizeScoringResults(results: ScoringResults): ScoringResults {
+  const normalizedScores = results.scores.map((score) => normalizeResumeScore(score));
+  const bestMatch = normalizedScores.find((score) => score.id === results.bestMatch.id) ?? normalizeResumeScore(results.bestMatch);
+
+  return {
+    ...results,
+    scores: normalizedScores,
+    bestMatch,
+  };
+}
+
+function recommendationChoiceKey(section: RecommendationListKey, value: string) {
+  return `${section}::${value}`;
 }
 
 function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
@@ -126,10 +155,26 @@ function DimensionBar({ label, score, reasoning, delay }: { label: string; score
   );
 }
 
-function ResumeCard({ score, rank, isExpanded, onToggle }: { score: ResumeScore; rank: number; isExpanded: boolean; onToggle: () => void }) {
+function ResumeCard({
+  score,
+  rank,
+  isExpanded,
+  isEditable,
+  selectedCount,
+  onToggle,
+  isRecommendationSelected,
+  onToggleRecommendation,
+}: {
+  score: ResumeScore;
+  rank: number;
+  isExpanded: boolean;
+  isEditable: boolean;
+  selectedCount: number;
+  onToggle: () => void;
+  isRecommendationSelected: (section: RecommendationListKey, value: string) => boolean;
+  onToggleRecommendation: (section: RecommendationListKey, value: string, checked: boolean) => void;
+}) {
   const isBest = rank === 1;
-  const scoreColor =
-    score.compositeScore >= 80 ? "#16a34a" : score.compositeScore >= 60 ? "#c84b2f" : score.compositeScore >= 40 ? "#b45309" : "#9f1239";
 
   return (
     <article
@@ -154,6 +199,9 @@ function ResumeCard({ score, rank, isExpanded, onToggle }: { score: ResumeScore;
           <h2 className="card-filename">{score.id}</h2>
           <p className="card-summary-short">{score.summary}</p>
           <div className="card-tags">
+            <span className={`editability-tag ${isEditable ? "editability-tag--editable" : "editability-tag--locked"}`}>
+              {isEditable ? "Editable" : "Locked PDF"}
+            </span>
             <span
               className="threshold-tag"
               style={{
@@ -167,6 +215,7 @@ function ResumeCard({ score, rank, isExpanded, onToggle }: { score: ResumeScore;
             <span className="skills-tag">
               {score.matchedSkills.length} / {score.matchedSkills.length + score.missingSkills.length} skills
             </span>
+            {isEditable && selectedCount > 0 && <span className="selected-tag">{selectedCount} edit(s) selected</span>}
           </div>
         </div>
 
@@ -252,6 +301,42 @@ function ResumeCard({ score, rank, isExpanded, onToggle }: { score: ResumeScore;
               </div>
             </section>
           )}
+
+          <section className="detail-section">
+            <h3 className="detail-heading">Recommendations</h3>
+            <p className="recommendation-summary">{score.recommendations.summary || "No additional recommendation summary provided."}</p>
+            {isEditable ? (
+              <div className="recommendation-grid">
+                {RECOMMENDATION_SECTIONS.map((section) => (
+                  <div key={section.key} className="recommendation-section">
+                    <h4 className="recommendation-title">{section.label}</h4>
+                    {score.recommendations[section.key].length > 0 ? (
+                      <div className="recommendation-list">
+                        {score.recommendations[section.key].map((item, itemIndex) => {
+                          const inputId = `${score.id}-${section.key}-${itemIndex}`;
+                          return (
+                            <label key={inputId} htmlFor={inputId} className="recommendation-item">
+                              <input
+                                id={inputId}
+                                type="checkbox"
+                                checked={isRecommendationSelected(section.key, item)}
+                                onChange={(event) => onToggleRecommendation(section.key, item, event.target.checked)}
+                              />
+                              <span>{item}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="empty-chips">{section.emptyText}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="recommendation-locked">Resume editing is only available for resumes uploaded as editable.</p>
+            )}
+          </section>
         </div>
       </div>
     </article>
@@ -263,6 +348,65 @@ export default function ResultsPage() {
   const [results, setResults] = useState<ScoringResults | null>(null);
   const [jobPosting, setJobPosting] = useState<JobPosting | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [resumeMetadataById, setResumeMetadataById] = useState<Record<string, ResumeMetadata>>({});
+  const [selectedRecommendations, setSelectedRecommendations] = useState<SelectedRecommendationMap>({});
+  const [editSelectionStatus, setEditSelectionStatus] = useState<string | null>(null);
+
+  const toggleRecommendation = (resumeId: string, section: RecommendationListKey, value: string, checked: boolean) => {
+    const changeKey = recommendationChoiceKey(section, value);
+    setSelectedRecommendations((previous) => {
+      const resumeSelections = { ...(previous[resumeId] ?? {}) };
+      if (checked) {
+        resumeSelections[changeKey] = true;
+      } else {
+        delete resumeSelections[changeKey];
+      }
+      if (Object.keys(resumeSelections).length === 0) {
+        const { [resumeId]: removedResume, ...rest } = previous;
+        void removedResume;
+        return rest;
+      }
+      return {
+        ...previous,
+        [resumeId]: resumeSelections,
+      };
+    });
+    setEditSelectionStatus(null);
+  };
+
+  const isRecommendationSelected = (resumeId: string, section: RecommendationListKey, value: string) =>
+    Boolean(selectedRecommendations[resumeId]?.[recommendationChoiceKey(section, value)]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadResumeMetadata = async () => {
+      try {
+        const res = await fetch("/api/resumes", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = (await res.json()) as ResumeListResponse;
+        if (!json.success || !json.resumes || cancelled) return;
+
+        const byId = json.resumes.reduce<Record<string, ResumeMetadata>>((acc, resume) => {
+          acc[resume.id] = {
+            isEditable: resume.isEditable,
+            hasLatex: resume.hasLatex,
+          };
+          return acc;
+        }, {});
+
+        setResumeMetadataById(byId);
+      } catch {
+        // Best-effort metadata lookup; scoring view still works without this.
+      }
+    };
+
+    loadResumeMetadata();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -278,13 +422,14 @@ export default function ResultsPage() {
       const fromBrowserJob = sessionJob ?? localJob;
 
       if (fromBrowserResults) {
+        const normalizedResults = normalizeScoringResults(fromBrowserResults);
         if (cancelled) return;
-        setResults(fromBrowserResults);
-        setExpandedId(fromBrowserResults.bestMatch.id);
+        setResults(normalizedResults);
+        setExpandedId(normalizedResults.bestMatch.id);
         if (fromBrowserJob) setJobPosting(fromBrowserJob);
 
-        sessionStorage.setItem("scoringResults", JSON.stringify(fromBrowserResults));
-        localStorage.setItem("scoringResults", JSON.stringify(fromBrowserResults));
+        sessionStorage.setItem("scoringResults", JSON.stringify(normalizedResults));
+        localStorage.setItem("scoringResults", JSON.stringify(normalizedResults));
         if (fromBrowserJob) {
           sessionStorage.setItem("parsedJob", JSON.stringify(fromBrowserJob));
           localStorage.setItem("parsedJob", JSON.stringify(fromBrowserJob));
@@ -300,12 +445,13 @@ export default function ResultsPage() {
         if (!json.success || !json.data) throw new Error("No latest run state.");
         if (cancelled) return;
 
-        setResults(json.data.scoringResults);
-        setExpandedId(json.data.scoringResults.bestMatch.id);
+        const normalizedResults = normalizeScoringResults(json.data.scoringResults);
+        setResults(normalizedResults);
+        setExpandedId(normalizedResults.bestMatch.id);
         setJobPosting(json.data.jobPosting);
 
-        sessionStorage.setItem("scoringResults", JSON.stringify(json.data.scoringResults));
-        localStorage.setItem("scoringResults", JSON.stringify(json.data.scoringResults));
+        sessionStorage.setItem("scoringResults", JSON.stringify(normalizedResults));
+        localStorage.setItem("scoringResults", JSON.stringify(normalizedResults));
         sessionStorage.setItem("parsedJob", JSON.stringify(json.data.jobPosting));
         localStorage.setItem("parsedJob", JSON.stringify(json.data.jobPosting));
       } catch {
@@ -330,6 +476,53 @@ export default function ResultsPage() {
       </main>
     );
   }
+
+  const editableResumeIds = results.scores
+    .map((score) => score.id)
+    .filter((resumeId) => resumeMetadataById[resumeId]?.isEditable);
+  const hasEditableResumes = editableResumeIds.length > 0;
+  const selectedCountByResume = results.scores.reduce<Record<string, number>>((acc, score) => {
+    acc[score.id] = Object.keys(selectedRecommendations[score.id] ?? {}).length;
+    return acc;
+  }, {});
+  const totalSelectedEdits = Object.values(selectedCountByResume).reduce((sum, count) => sum + count, 0);
+
+  const prepareSelectedEdits = () => {
+    if (!results) return;
+    const payload = results.scores
+      .map((score) => {
+        if (!resumeMetadataById[score.id]?.isEditable) {
+          return null;
+        }
+
+        const selectedKeys = selectedRecommendations[score.id] ?? {};
+        const selected = RECOMMENDATION_SECTIONS.reduce<Record<RecommendationListKey, string[]>>(
+          (acc, section) => {
+            acc[section.key] = score.recommendations[section.key].filter((item) => selectedKeys[recommendationChoiceKey(section.key, item)]);
+            return acc;
+          },
+          {
+            addSkills: [],
+            removeSkills: [],
+            addExperienceBullets: [],
+            removeOrTrimBullets: [],
+          },
+        );
+
+        if (Object.values(selected).every((items) => items.length === 0)) {
+          return null;
+        }
+
+        return {
+          resumeId: score.id,
+          selectedChanges: selected,
+        };
+      })
+      .filter((entry): entry is { resumeId: string; selectedChanges: Record<RecommendationListKey, string[]> } => Boolean(entry));
+
+    sessionStorage.setItem("selectedResumeRecommendations", JSON.stringify(payload));
+    setEditSelectionStatus(`Saved ${payload.length} resume edit package(s) for the editing flow.`);
+  };
 
   return (
     <main className="page-root">
@@ -444,10 +637,31 @@ export default function ResultsPage() {
               score={score}
               rank={i + 1}
               isExpanded={expandedId === score.id}
+              isEditable={Boolean(resumeMetadataById[score.id]?.isEditable)}
+              selectedCount={selectedCountByResume[score.id] ?? 0}
               onToggle={() => setExpandedId(expandedId === score.id ? null : score.id)}
+              isRecommendationSelected={(section, value) => isRecommendationSelected(score.id, section, value)}
+              onToggleRecommendation={(section, value, checked) => toggleRecommendation(score.id, section, value, checked)}
             />
           ))}
         </section>
+
+        {hasEditableResumes && (
+          <section className="edit-selection-panel">
+            <div className="edit-selection-copy">
+              <h3>Selected recommendation edits</h3>
+              <p>
+                {totalSelectedEdits > 0
+                  ? `${totalSelectedEdits} recommendation edit(s) selected across ${editableResumeIds.length} editable resume(s).`
+                  : `Select recommendations from editable resumes to prepare an edit package.`}
+              </p>
+              {editSelectionStatus && <p className="edit-selection-status">{editSelectionStatus}</p>}
+            </div>
+            <button className="action-btn action-btn--primary" disabled={totalSelectedEdits === 0} onClick={prepareSelectedEdits}>
+              Prepare selected edits
+            </button>
+          </section>
+        )}
 
         {/* Footer actions */}
         <div className="footer-actions">
@@ -670,6 +884,23 @@ export default function ResultsPage() {
           letter-spacing: 0.06em; text-transform: uppercase;
           padding: 3px 8px; border-radius: 2px; border: 1px solid;
         }
+        .editability-tag, .selected-tag {
+          font-family: var(--mono); font-size: 10px;
+          letter-spacing: 0.06em; text-transform: uppercase;
+          padding: 3px 8px; border-radius: 2px; border: 1px solid;
+        }
+        .editability-tag--editable {
+          background: rgba(22,163,74,0.1);
+          color: #166534; border-color: rgba(22,163,74,0.25);
+        }
+        .editability-tag--locked {
+          background: var(--paper-2);
+          color: var(--ink-3); border-color: var(--border);
+        }
+        .selected-tag {
+          background: rgba(200,75,47,0.12);
+          color: var(--accent); border-color: rgba(200,75,47,0.25);
+        }
         .skills-tag {
           background: var(--paper-2); color: var(--ink-3);
           border-color: var(--border);
@@ -685,7 +916,7 @@ export default function ResultsPage() {
           max-height: 0; overflow: hidden;
           transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .card-detail--open { max-height: 1200px; }
+        .card-detail--open { max-height: 10000px; }
 
         .detail-inner {
           padding: 0 24px 28px;
@@ -755,6 +986,80 @@ export default function ResultsPage() {
           font-family: var(--mono); font-size: 11px; color: var(--ink-3);
           font-style: italic;
         }
+        .recommendation-summary {
+          font-size: 13px; color: var(--ink-2); line-height: 1.6;
+        }
+        .recommendation-grid {
+          display: grid;
+          gap: 16px;
+          grid-template-columns: 1fr 1fr;
+        }
+        .recommendation-section {
+          border: 1px solid var(--border);
+          border-radius: 3px;
+          padding: 12px;
+          background: var(--paper-2);
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .recommendation-title {
+          font-family: var(--mono);
+          font-size: 10px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--ink-3);
+        }
+        .recommendation-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .recommendation-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          font-size: 12px;
+          color: var(--ink-2);
+          line-height: 1.5;
+          cursor: pointer;
+        }
+        .recommendation-item input {
+          margin-top: 2px;
+          accent-color: var(--accent);
+        }
+        .recommendation-locked {
+          font-family: var(--mono);
+          font-size: 11px;
+          color: var(--ink-3);
+        }
+
+        .edit-selection-panel {
+          background: #fff;
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          padding: 16px;
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          align-items: center;
+        }
+        .edit-selection-copy h3 {
+          font-size: 13px;
+          color: var(--ink);
+          margin-bottom: 4px;
+        }
+        .edit-selection-copy p {
+          font-size: 12px;
+          color: var(--ink-2);
+          line-height: 1.5;
+        }
+        .edit-selection-status {
+          margin-top: 6px;
+          font-family: var(--mono);
+          font-size: 11px;
+          color: #166534 !important;
+        }
 
         /* ── Footer actions ───────────────────────────────── */
         .footer-actions {
@@ -782,6 +1087,12 @@ export default function ResultsPage() {
           transform: translateY(-1px);
           box-shadow: 0 4px 16px rgba(200,75,47,0.25);
         }
+        .action-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          transform: none;
+          box-shadow: none;
+        }
 
         /* ── Spinner ──────────────────────────────────────── */
         .spinner {
@@ -805,7 +1116,9 @@ export default function ResultsPage() {
           .step-connector { min-width: 20px; }
           .card-header { padding: 16px; gap: 12px; }
           .detail-cols { grid-template-columns: 1fr; }
+          .recommendation-grid { grid-template-columns: 1fr; }
           .summary-strip { overflow-x: auto; }
+          .edit-selection-panel { flex-direction: column; align-items: stretch; }
           .footer-actions { flex-direction: column; }
           .action-btn { text-align: center; }
           .resume-card--best .card-header { padding-right: 16px; }

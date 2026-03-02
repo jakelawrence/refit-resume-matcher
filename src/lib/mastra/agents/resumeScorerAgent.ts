@@ -1,6 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import { anthropic } from "@ai-sdk/anthropic";
-import { ScorerOutputSchema, type ScorerInput } from "@/types/resumeScore";
+import { ScorerModelOutputSchema, type ScorerInput } from "@/types/resumeScore";
 import { wrapUntrustedText } from "@/lib/mastra/promptHardening";
 
 export const resumeScorerAgent = new Agent({
@@ -91,11 +91,24 @@ Populate matchedKeywords with the keywords that were found.
 ## Output Rules
 
 - scores[] must be sorted by compositeScore descending (highest first).
-- bestMatch must reference the highest-scoring resume (first in scores[]).
-- Set meetsThreshold = true on any resume whose compositeScore >= threshold.
-- Set bestMatchMeetsThreshold based on the best match's meetsThreshold value.
+- Do not include top-level bestMatch, bestMatchMeetsThreshold, or threshold fields.
+- Set meetsThreshold = false for all items (workflow computes this deterministically).
 - summary should be 2-3 plain-English sentences a hiring manager would find
   useful — highlight key strengths and the most important gap, if any.
+- recommendations must be present for every resume with this exact structure:
+  recommendations.addSkills: string[]
+  recommendations.removeSkills: string[]
+  recommendations.addExperienceBullets: string[]
+  recommendations.removeOrTrimBullets: string[]
+  recommendations.summary: string
+- recommendations rules:
+  - Keep items evidence-based and traceable to job requirements/resume content.
+  - Use concise, specific action statements (not vague advice).
+  - Keep each list focused: prefer 0-5 high-impact items per list.
+  - If no strong items exist for a list, return an empty array ([]), never null.
+  - "removeOrTrimBullets" should only include items likely present in the resume.
+  - "recommendations.summary" should be 1-2 sentences that explain why these edits
+    would improve match quality for this role.
 - Be consistent: base scores on evidence in the text, not assumptions.
 - Do not reward padding or keyword stuffing — verify skills against described
   experience, not just mentions.
@@ -124,7 +137,7 @@ ${wrapUntrustedText(`resume_${i + 1}`, r.text)}
   .join("\n---\n")}
 `.trim();
 
-  const result = await resumeScorerAgent.generate([{ role: "user", content: prompt }], { structuredOutput: { schema: ScorerOutputSchema } });
+  const result = await resumeScorerAgent.generate([{ role: "user", content: prompt }], { structuredOutput: { schema: ScorerModelOutputSchema } });
 
-  return result.object; // typed as ScorerOutput
+  return result.object;
 }
