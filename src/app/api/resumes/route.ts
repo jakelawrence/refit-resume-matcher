@@ -24,9 +24,7 @@ export async function GET() {
         id: filename,
         filename,
         sizeBytes: stats.size,
-        uploadedAt: stats.mtime.toISOString(),
-        isEditable: parsed?.isEditable ?? false,
-        hasLatex: Boolean(parsed?.latexPath),
+        uploadedAt: parsed?.uploadedAt ?? stats.mtime.toISOString(),
       };
     });
 

@@ -19,11 +19,11 @@ It:
 
 ## Screenshots
 
-### Home (Job Posting Input)
+### Home (Resume Upload)
 
 ![Home page](docs/screenshots/01-home.png)
 
-### Upload (Resume Upload + Selection)
+### Job Posting
 
 ![Upload page](docs/screenshots/02-upload.png)
 
@@ -61,15 +61,16 @@ npm run dev
 
 ## App Flow
 
-1. Paste job posting on `/`:
-   - Calls `POST /api/parse`
-   - Uses `jobParserAgent`
+1. Landing page (`/`) redirects to resume upload on `/upload`.
 2. Upload resumes on `/upload`:
    - Calls `POST /api/resumes/upload`
    - Extracts text from PDF (`unpdf`)
    - Structures resume text via `resumeStructurerAgent`
    - Persists parsed data to `resumes/parsed-resumes.json`
-3. Score resumes:
+3. Paste job posting on `/job`:
+   - Calls `POST /api/parse`
+   - Uses `jobParserAgent`
+4. Score resumes:
    - Calls `POST /api/score`
    - Uses `resumeScorerAgent`
    - Returns sorted match scores and best match

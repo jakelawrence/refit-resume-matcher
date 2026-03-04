@@ -8,8 +8,6 @@ interface StoredResume {
   filename: string;
   sizeBytes: number;
   uploadedAt: string;
-  isEditable: boolean;
-  hasLatex: boolean;
 }
 
 function formatBytes(bytes: number) {
@@ -35,10 +33,8 @@ export default function UploadPage() {
   const [loadingList, setLoadingList] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadAsEditable, setUploadAsEditable] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [isScoring, setIsScoring] = useState(false);
-  const [scoringError, setScoringError] = useState<string | null>(null);
+  const [continueError, setContinueError] = useState<string | null>(null);
 
   // ── Load stored resumes ──────────────────────────────────────────────────
   const fetchResumes = useCallback(async () => {
@@ -97,7 +93,6 @@ export default function UploadPage() {
     try {
       const form = new FormData();
       form.append("resume", file);
-      form.append("editable", String(uploadAsEditable));
 
       const res = await fetch("/api/resumes/upload", {
         method: "POST",
@@ -131,50 +126,20 @@ export default function UploadPage() {
     if (file) uploadFile(file);
   }
 
-  // ── Score resumes ─────────────────────────────────────────────────────────
-  async function handleScore() {
-    setScoringError(null);
-
-    const parsedJob = sessionStorage.getItem("parsedJob") ?? localStorage.getItem("parsedJob");
-    if (!parsedJob) {
-      setScoringError("Job posting data not found. Please go back to step 1.");
-      return;
-    }
+  function handleContinue() {
+    setContinueError(null);
 
     const targetIds = selected.size > 0 ? [...selected] : resumes.map((r) => r.id);
     if (targetIds.length === 0) {
-      setScoringError("Please upload at least one résumé before scoring.");
+      setContinueError("Please upload at least one résumé before continuing.");
       return;
     }
 
-    setIsScoring(true);
+    const serializedIds = JSON.stringify(targetIds);
+    sessionStorage.setItem("selectedResumeIds", serializedIds);
+    localStorage.setItem("selectedResumeIds", serializedIds);
 
-    try {
-      // Fetch text for each selected resume via the score endpoint
-      // (text extraction happens server-side — here we just pass IDs)
-      const res = await fetch("/api/score", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jobPosting: JSON.parse(parsedJob),
-          resumeIds: targetIds,
-        }),
-      });
-
-      const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.error ?? "Scoring failed.");
-
-      sessionStorage.setItem("parsedJob", parsedJob);
-      localStorage.setItem("parsedJob", parsedJob);
-
-      const serializedResults = JSON.stringify(json.data);
-      sessionStorage.setItem("scoringResults", serializedResults);
-      localStorage.setItem("scoringResults", serializedResults);
-      router.push("/results");
-    } catch (err) {
-      setScoringError(err instanceof Error ? err.message : "Scoring failed.");
-      setIsScoring(false);
-    }
+    router.push("/job");
   }
 
   const activeCount = selected.size === 0 ? resumes.length : selected.size;
@@ -196,14 +161,14 @@ export default function UploadPage() {
 
         {/* Step indicator */}
         <nav className="steps" aria-label="Progress">
-          <div className="step step--done">
+          <div className="step step--active">
             <span className="step-num">01</span>
-            <span className="step-label">Paste job posting</span>
+            <span className="step-label">Upload résumés</span>
           </div>
           <div className="step-connector" />
-          <div className="step step--active">
+          <div className="step step--pending">
             <span className="step-num">02</span>
-            <span className="step-label">Upload résumés</span>
+            <span className="step-label">Paste job posting</span>
           </div>
           <div className="step-connector" />
           <div className="step step--pending">
@@ -245,28 +210,6 @@ export default function UploadPage() {
             <span className="dropzone-secondary">Drag & drop or click to browse · PDF only · Max 5 MB</span>
           </div>
         </button>
-
-        <div className="upload-options" role="group" aria-label="Upload options">
-          <span className="upload-options-label">Editable conversion</span>
-          <div className="toggle-group">
-            <button
-              type="button"
-              className={`toggle-btn ${!uploadAsEditable ? "toggle-btn--active" : ""}`}
-              onClick={() => setUploadAsEditable(false)}
-              disabled={uploading}
-            >
-              No
-            </button>
-            <button
-              type="button"
-              className={`toggle-btn ${uploadAsEditable ? "toggle-btn--active" : ""}`}
-              onClick={() => setUploadAsEditable(true)}
-              disabled={uploading}
-            >
-              Yes
-            </button>
-          </div>
-        </div>
 
         {uploadError && (
           <div className="error-banner" role="alert">
@@ -348,10 +291,6 @@ export default function UploadPage() {
                           </span>
                         </div>
 
-                        <div className={`editable-pill ${resume.isEditable ? "editable-pill--on" : "editable-pill--off"}`}>
-                          {resume.isEditable ? (resume.hasLatex ? "Editable (LaTeX ready)" : "Editable") : "Locked PDF"}
-                        </div>
-
                         <div className={`selection-pill ${isChecked ? "selection-pill--on" : "selection-pill--off"}`}>
                           {isChecked ? "Scoring" : "Skipped"}
                         </div>
@@ -364,37 +303,30 @@ export default function UploadPage() {
           </div>
         </section>
 
-        {/* Scoring footer */}
+        {/* Continue footer */}
         {resumes.length > 0 && (
           <div className="score-footer">
-            {scoringError && (
+            {continueError && (
               <div className="error-banner" role="alert">
                 <span className="error-icon">!</span>
-                {scoringError}
+                {continueError}
               </div>
             )}
 
             <div className="score-row">
               <p className="score-summary">
                 {activeCount === resumes.length
-                  ? `Scoring all ${resumes.length} résumé${resumes.length !== 1 ? "s" : ""}`
-                  : `Scoring ${activeCount} of ${resumes.length} résumé${resumes.length !== 1 ? "s" : ""}`}
+                  ? `Selected all ${resumes.length} résumé${resumes.length !== 1 ? "s" : ""}`
+                  : `Selected ${activeCount} of ${resumes.length} résumé${resumes.length !== 1 ? "s" : ""}`}
               </p>
 
-              <button className={`submit-btn ${!isScoring ? "submit-btn--ready" : "submit-btn--loading"}`} onClick={handleScore} disabled={isScoring}>
-                {isScoring ? (
-                  <>
-                    <span className="spinner" />
-                    Scoring…
-                  </>
-                ) : (
-                  <>
-                    Score résumés
-                    <span className="btn-arrow" aria-hidden="true">
-                      →
-                    </span>
-                  </>
-                )}
+              <button className="submit-btn submit-btn--ready" onClick={handleContinue}>
+                <>
+                  Continue to job posting
+                  <span className="btn-arrow" aria-hidden="true">
+                    →
+                  </span>
+                </>
               </button>
             </div>
           </div>
@@ -414,7 +346,6 @@ export default function UploadPage() {
           --accent-2:   #e8612e;
           --accent-dim: rgba(200, 75, 47, 0.12);
           --green:      #166534;
-          --green-bg:   #dcfce7;
           --border:     rgba(14,14,14,0.12);
           --radius:     4px;
           --mono:       "DM Mono", "Fira Mono", monospace;
@@ -535,46 +466,6 @@ export default function UploadPage() {
         .dropzone-secondary {
           font-family: var(--mono); font-size: 11px;
           letter-spacing: 0.04em; color: var(--ink-3);
-        }
-
-        .upload-options {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-        }
-        .upload-options-label {
-          font-family: var(--mono);
-          font-size: 11px;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          color: var(--ink-3);
-        }
-        .toggle-group {
-          display: inline-flex;
-          border: 1px solid var(--border);
-          border-radius: 2px;
-          overflow: hidden;
-          background: #fff;
-        }
-        .toggle-btn {
-          border: none;
-          background: transparent;
-          color: var(--ink-3);
-          padding: 6px 12px;
-          font-family: var(--mono);
-          font-size: 11px;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          cursor: pointer;
-        }
-        .toggle-btn:disabled {
-          cursor: not-allowed;
-          opacity: 0.6;
-        }
-        .toggle-btn--active {
-          background: var(--ink);
-          color: var(--paper);
         }
 
         /* ── Card ───────────────────────────────────────────── */
@@ -717,25 +608,6 @@ export default function UploadPage() {
           color: var(--ink-3);
           border: 1px solid var(--border);
         }
-        .editable-pill {
-          font-family: var(--mono); font-size: 10px;
-          letter-spacing: 0.04em;
-          padding: 3px 8px;
-          border-radius: 2px;
-          border: 1px solid var(--border);
-          flex-shrink: 0;
-          white-space: nowrap;
-        }
-        .editable-pill--on {
-          background: #e7f7ef;
-          border-color: #b7e4c7;
-          color: #166534;
-        }
-        .editable-pill--off {
-          background: var(--paper-2);
-          color: var(--ink-3);
-        }
-
         /* ── Score footer ───────────────────────────────────── */
         .score-footer {
           display: flex; flex-direction: column; gap: 12px;

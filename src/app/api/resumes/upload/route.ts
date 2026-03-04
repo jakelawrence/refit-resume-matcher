@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { ensureResumesDir, extractPdfText, RESUMES_DIR, upsertParsedResume, writeResumeLatex } from "@/lib/resumes/storage";
+import { ensureResumesDir, extractPdfText, RESUMES_DIR, upsertParsedResume } from "@/lib/resumes/storage";
 import { validateResumeText } from "@/lib/validation/inputGuards";
 import { requireAnthropicApiKey } from "@/lib/api/preflight";
-import { convertResumeToLatex } from "@/lib/mastra/agents/resumeLatexConverterAgent";
 import { parseResumeToStructured } from "@/lib/mastra/agents/resumeStructurerAgent";
 
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -20,7 +19,6 @@ function safeDeleteFile(filePath: string | null) {
 
 export async function POST(req: NextRequest) {
   let savedPdfPath: string | null = null;
-  let savedLatexPath: string | null = null;
 
   try {
     const apiKeyError = requireAnthropicApiKey();
@@ -31,8 +29,6 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
     const file = formData.get("resume") as File | null;
-    const editableValue = formData.get("editable");
-    const isEditable = typeof editableValue === "string" && editableValue.toLowerCase() === "true";
 
     if (!file) {
       return NextResponse.json({ success: false, error: "No file provided. Send a PDF as 'resume'." }, { status: 400 });
@@ -82,40 +78,18 @@ export async function POST(req: NextRequest) {
       uploadedAt,
     };
 
-    let latexPath: string | null = null;
-    let latexUpdatedAt: string | null = null;
-
-    if (isEditable) {
-      const latexResult = await convertResumeToLatex({
-        resumeText: text,
-        structuredResume: structured,
-      });
-
-      latexPath = writeResumeLatex(filename, latexResult.latex);
-      savedLatexPath = latexPath;
-      latexUpdatedAt = new Date().toISOString();
-    }
-
     upsertParsedResume({
       ...storedResume,
       text,
       structured,
       parsedAt: new Date().toISOString(),
-      isEditable,
-      latexPath,
-      latexUpdatedAt,
     });
 
     return NextResponse.json({
       success: true,
-      resume: {
-        ...storedResume,
-        isEditable,
-        hasLatex: Boolean(latexPath),
-      },
+      resume: storedResume,
     });
   } catch (err) {
-    safeDeleteFile(savedLatexPath);
     safeDeleteFile(savedPdfPath);
     const message = err instanceof Error ? err.message : "Upload failed.";
     console.error("[upload]", message);

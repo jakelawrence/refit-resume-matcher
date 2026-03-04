@@ -7,22 +7,7 @@ import type { ResumeScore, ScorerOutput } from "@/types/resumeScore";
 
 type ScoringResults = ScorerOutput;
 
-interface ResumeListResponse {
-  success: boolean;
-  resumes?: Array<{
-    id: string;
-    isEditable: boolean;
-    hasLatex: boolean;
-  }>;
-}
-
-interface ResumeMetadata {
-  isEditable: boolean;
-  hasLatex: boolean;
-}
-
 type RecommendationListKey = Exclude<keyof ResumeScore["recommendations"], "summary">;
-type SelectedRecommendationMap = Record<string, Record<string, boolean>>;
 
 const EMPTY_RECOMMENDATIONS: ResumeScore["recommendations"] = {
   addSkills: [],
@@ -80,10 +65,6 @@ function normalizeScoringResults(results: ScoringResults): ScoringResults {
     scores: normalizedScores,
     bestMatch,
   };
-}
-
-function recommendationChoiceKey(section: RecommendationListKey, value: string) {
-  return `${section}::${value}`;
 }
 
 function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
@@ -155,25 +136,7 @@ function DimensionBar({ label, score, reasoning, delay }: { label: string; score
   );
 }
 
-function ResumeCard({
-  score,
-  rank,
-  isExpanded,
-  isEditable,
-  selectedCount,
-  onToggle,
-  isRecommendationSelected,
-  onToggleRecommendation,
-}: {
-  score: ResumeScore;
-  rank: number;
-  isExpanded: boolean;
-  isEditable: boolean;
-  selectedCount: number;
-  onToggle: () => void;
-  isRecommendationSelected: (section: RecommendationListKey, value: string) => boolean;
-  onToggleRecommendation: (section: RecommendationListKey, value: string, checked: boolean) => void;
-}) {
+function ResumeCard({ score, rank, isExpanded, onToggle }: { score: ResumeScore; rank: number; isExpanded: boolean; onToggle: () => void }) {
   const isBest = rank === 1;
 
   return (
@@ -199,9 +162,6 @@ function ResumeCard({
           <h2 className="card-filename">{score.id}</h2>
           <p className="card-summary-short">{score.summary}</p>
           <div className="card-tags">
-            <span className={`editability-tag ${isEditable ? "editability-tag--editable" : "editability-tag--locked"}`}>
-              {isEditable ? "Editable" : "Locked PDF"}
-            </span>
             <span
               className="threshold-tag"
               style={{
@@ -215,7 +175,6 @@ function ResumeCard({
             <span className="skills-tag">
               {score.matchedSkills.length} / {score.matchedSkills.length + score.missingSkills.length} skills
             </span>
-            {isEditable && selectedCount > 0 && <span className="selected-tag">{selectedCount} edit(s) selected</span>}
           </div>
         </div>
 
@@ -305,37 +264,24 @@ function ResumeCard({
           <section className="detail-section">
             <h3 className="detail-heading">Recommendations</h3>
             <p className="recommendation-summary">{score.recommendations.summary || "No additional recommendation summary provided."}</p>
-            {isEditable ? (
-              <div className="recommendation-grid">
-                {RECOMMENDATION_SECTIONS.map((section) => (
-                  <div key={section.key} className="recommendation-section">
-                    <h4 className="recommendation-title">{section.label}</h4>
-                    {score.recommendations[section.key].length > 0 ? (
-                      <div className="recommendation-list">
-                        {score.recommendations[section.key].map((item, itemIndex) => {
-                          const inputId = `${score.id}-${section.key}-${itemIndex}`;
-                          return (
-                            <label key={inputId} htmlFor={inputId} className="recommendation-item">
-                              <input
-                                id={inputId}
-                                type="checkbox"
-                                checked={isRecommendationSelected(section.key, item)}
-                                onChange={(event) => onToggleRecommendation(section.key, item, event.target.checked)}
-                              />
-                              <span>{item}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="empty-chips">{section.emptyText}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="recommendation-locked">Resume editing is only available for resumes uploaded as editable.</p>
-            )}
+            <div className="recommendation-grid">
+              {RECOMMENDATION_SECTIONS.map((section) => (
+                <div key={section.key} className="recommendation-section">
+                  <h4 className="recommendation-title">{section.label}</h4>
+                  {score.recommendations[section.key].length > 0 ? (
+                    <ul className="recommendation-list">
+                      {score.recommendations[section.key].map((item) => (
+                        <li key={item} className="recommendation-item">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="empty-chips">{section.emptyText}</p>
+                  )}
+                </div>
+              ))}
+            </div>
           </section>
         </div>
       </div>
@@ -348,65 +294,6 @@ export default function ResultsPage() {
   const [results, setResults] = useState<ScoringResults | null>(null);
   const [jobPosting, setJobPosting] = useState<JobPosting | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [resumeMetadataById, setResumeMetadataById] = useState<Record<string, ResumeMetadata>>({});
-  const [selectedRecommendations, setSelectedRecommendations] = useState<SelectedRecommendationMap>({});
-  const [editSelectionStatus, setEditSelectionStatus] = useState<string | null>(null);
-
-  const toggleRecommendation = (resumeId: string, section: RecommendationListKey, value: string, checked: boolean) => {
-    const changeKey = recommendationChoiceKey(section, value);
-    setSelectedRecommendations((previous) => {
-      const resumeSelections = { ...(previous[resumeId] ?? {}) };
-      if (checked) {
-        resumeSelections[changeKey] = true;
-      } else {
-        delete resumeSelections[changeKey];
-      }
-      if (Object.keys(resumeSelections).length === 0) {
-        const { [resumeId]: removedResume, ...rest } = previous;
-        void removedResume;
-        return rest;
-      }
-      return {
-        ...previous,
-        [resumeId]: resumeSelections,
-      };
-    });
-    setEditSelectionStatus(null);
-  };
-
-  const isRecommendationSelected = (resumeId: string, section: RecommendationListKey, value: string) =>
-    Boolean(selectedRecommendations[resumeId]?.[recommendationChoiceKey(section, value)]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadResumeMetadata = async () => {
-      try {
-        const res = await fetch("/api/resumes", { cache: "no-store" });
-        if (!res.ok) return;
-        const json = (await res.json()) as ResumeListResponse;
-        if (!json.success || !json.resumes || cancelled) return;
-
-        const byId = json.resumes.reduce<Record<string, ResumeMetadata>>((acc, resume) => {
-          acc[resume.id] = {
-            isEditable: resume.isEditable,
-            hasLatex: resume.hasLatex,
-          };
-          return acc;
-        }, {});
-
-        setResumeMetadataById(byId);
-      } catch {
-        // Best-effort metadata lookup; scoring view still works without this.
-      }
-    };
-
-    loadResumeMetadata();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -477,53 +364,6 @@ export default function ResultsPage() {
     );
   }
 
-  const editableResumeIds = results.scores
-    .map((score) => score.id)
-    .filter((resumeId) => resumeMetadataById[resumeId]?.isEditable);
-  const hasEditableResumes = editableResumeIds.length > 0;
-  const selectedCountByResume = results.scores.reduce<Record<string, number>>((acc, score) => {
-    acc[score.id] = Object.keys(selectedRecommendations[score.id] ?? {}).length;
-    return acc;
-  }, {});
-  const totalSelectedEdits = Object.values(selectedCountByResume).reduce((sum, count) => sum + count, 0);
-
-  const prepareSelectedEdits = () => {
-    if (!results) return;
-    const payload = results.scores
-      .map((score) => {
-        if (!resumeMetadataById[score.id]?.isEditable) {
-          return null;
-        }
-
-        const selectedKeys = selectedRecommendations[score.id] ?? {};
-        const selected = RECOMMENDATION_SECTIONS.reduce<Record<RecommendationListKey, string[]>>(
-          (acc, section) => {
-            acc[section.key] = score.recommendations[section.key].filter((item) => selectedKeys[recommendationChoiceKey(section.key, item)]);
-            return acc;
-          },
-          {
-            addSkills: [],
-            removeSkills: [],
-            addExperienceBullets: [],
-            removeOrTrimBullets: [],
-          },
-        );
-
-        if (Object.values(selected).every((items) => items.length === 0)) {
-          return null;
-        }
-
-        return {
-          resumeId: score.id,
-          selectedChanges: selected,
-        };
-      })
-      .filter((entry): entry is { resumeId: string; selectedChanges: Record<RecommendationListKey, string[]> } => Boolean(entry));
-
-    sessionStorage.setItem("selectedResumeRecommendations", JSON.stringify(payload));
-    setEditSelectionStatus(`Saved ${payload.length} resume edit package(s) for the editing flow.`);
-  };
-
   return (
     <main className="page-root">
       <div className="bg-grid" aria-hidden="true" />
@@ -542,12 +382,12 @@ export default function ResultsPage() {
         <nav className="steps" aria-label="Progress">
           <div className="step step--done">
             <span className="step-num">01</span>
-            <span className="step-label">Paste job posting</span>
+            <span className="step-label">Upload résumés</span>
           </div>
           <div className="step-connector" />
           <div className="step step--done">
             <span className="step-num">02</span>
-            <span className="step-label">Upload résumés</span>
+            <span className="step-label">Paste job posting</span>
           </div>
           <div className="step-connector" />
           <div className="step step--active">
@@ -570,8 +410,8 @@ export default function ResultsPage() {
               {jobPosting.company && <span className="job-co"> — {jobPosting.company}</span>}
               {jobPosting.location && <span className="job-loc"> · {jobPosting.location}</span>}
             </div>
-            <button className="start-over-btn" onClick={() => router.push("/")}>
-              Start over
+            <button className="start-over-btn" onClick={() => router.push("/job")}>
+              Start New Job Scan
             </button>
           </div>
         )}
@@ -637,39 +477,18 @@ export default function ResultsPage() {
               score={score}
               rank={i + 1}
               isExpanded={expandedId === score.id}
-              isEditable={Boolean(resumeMetadataById[score.id]?.isEditable)}
-              selectedCount={selectedCountByResume[score.id] ?? 0}
               onToggle={() => setExpandedId(expandedId === score.id ? null : score.id)}
-              isRecommendationSelected={(section, value) => isRecommendationSelected(score.id, section, value)}
-              onToggleRecommendation={(section, value, checked) => toggleRecommendation(score.id, section, value, checked)}
             />
           ))}
         </section>
-
-        {hasEditableResumes && (
-          <section className="edit-selection-panel">
-            <div className="edit-selection-copy">
-              <h3>Selected recommendation edits</h3>
-              <p>
-                {totalSelectedEdits > 0
-                  ? `${totalSelectedEdits} recommendation edit(s) selected across ${editableResumeIds.length} editable resume(s).`
-                  : `Select recommendations from editable resumes to prepare an edit package.`}
-              </p>
-              {editSelectionStatus && <p className="edit-selection-status">{editSelectionStatus}</p>}
-            </div>
-            <button className="action-btn action-btn--primary" disabled={totalSelectedEdits === 0} onClick={prepareSelectedEdits}>
-              Prepare selected edits
-            </button>
-          </section>
-        )}
 
         {/* Footer actions */}
         <div className="footer-actions">
           <button className="action-btn action-btn--secondary" onClick={() => router.push("/upload")}>
             ← Back to résumés
           </button>
-          <button className="action-btn action-btn--primary" onClick={() => router.push("/")}>
-            New job posting →
+          <button className="action-btn action-btn--primary" onClick={() => router.push("/job")}>
+            Start New Job Scan
           </button>
         </div>
       </div>
@@ -884,23 +703,6 @@ export default function ResultsPage() {
           letter-spacing: 0.06em; text-transform: uppercase;
           padding: 3px 8px; border-radius: 2px; border: 1px solid;
         }
-        .editability-tag, .selected-tag {
-          font-family: var(--mono); font-size: 10px;
-          letter-spacing: 0.06em; text-transform: uppercase;
-          padding: 3px 8px; border-radius: 2px; border: 1px solid;
-        }
-        .editability-tag--editable {
-          background: rgba(22,163,74,0.1);
-          color: #166534; border-color: rgba(22,163,74,0.25);
-        }
-        .editability-tag--locked {
-          background: var(--paper-2);
-          color: var(--ink-3); border-color: var(--border);
-        }
-        .selected-tag {
-          background: rgba(200,75,47,0.12);
-          color: var(--accent); border-color: rgba(200,75,47,0.25);
-        }
         .skills-tag {
           background: var(--paper-2); color: var(--ink-3);
           border-color: var(--border);
@@ -1014,51 +816,14 @@ export default function ResultsPage() {
           display: flex;
           flex-direction: column;
           gap: 8px;
+          margin: 0;
+          padding: 0;
+          list-style: none;
         }
         .recommendation-item {
-          display: flex;
-          align-items: flex-start;
-          gap: 8px;
           font-size: 12px;
           color: var(--ink-2);
           line-height: 1.5;
-          cursor: pointer;
-        }
-        .recommendation-item input {
-          margin-top: 2px;
-          accent-color: var(--accent);
-        }
-        .recommendation-locked {
-          font-family: var(--mono);
-          font-size: 11px;
-          color: var(--ink-3);
-        }
-
-        .edit-selection-panel {
-          background: #fff;
-          border: 1px solid var(--border);
-          border-radius: var(--radius);
-          padding: 16px;
-          display: flex;
-          justify-content: space-between;
-          gap: 12px;
-          align-items: center;
-        }
-        .edit-selection-copy h3 {
-          font-size: 13px;
-          color: var(--ink);
-          margin-bottom: 4px;
-        }
-        .edit-selection-copy p {
-          font-size: 12px;
-          color: var(--ink-2);
-          line-height: 1.5;
-        }
-        .edit-selection-status {
-          margin-top: 6px;
-          font-family: var(--mono);
-          font-size: 11px;
-          color: #166534 !important;
         }
 
         /* ── Footer actions ───────────────────────────────── */
@@ -1118,7 +883,6 @@ export default function ResultsPage() {
           .detail-cols { grid-template-columns: 1fr; }
           .recommendation-grid { grid-template-columns: 1fr; }
           .summary-strip { overflow-x: auto; }
-          .edit-selection-panel { flex-direction: column; align-items: stretch; }
           .footer-actions { flex-direction: column; }
           .action-btn { text-align: center; }
           .resume-card--best .card-header { padding-right: 16px; }
