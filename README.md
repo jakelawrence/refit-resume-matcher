@@ -14,7 +14,7 @@ It:
 - Next.js 16 (App Router)
 - TypeScript
 - Mastra (`@mastra/core`)
-- Anthropic via AI SDK (`@ai-sdk/anthropic`)
+- Multi-provider model routing via Mastra model IDs (`anthropic/*`, `openai/*`, `google/*`)
 - `unpdf` for PDF text extraction
 
 ## Screenshots
@@ -43,10 +43,12 @@ It:
 npm install
 ```
 
-2. Create `.env.local`:
+2. Create `.env.local` (you can set one or more):
 
 ```bash
 ANTHROPIC_API_KEY=your_key_here
+OPENAI_API_KEY=your_key_here
+GOOGLE_GENERATIVE_AI_API_KEY=your_key_here
 ```
 
 3. Run the app:

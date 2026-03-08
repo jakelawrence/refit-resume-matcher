@@ -1,7 +1,8 @@
 import { Agent } from "@mastra/core/agent";
-import { anthropic } from "@ai-sdk/anthropic";
 import { JobPostingSchema } from "@/types/jobPosting";
 import { wrapUntrustedText } from "@/lib/mastra/promptHardening";
+import { resolveRuntimeModelFromContext, createAiRequestContext } from "@/lib/mastra/aiRuntime";
+import type { ResolvedAiConfig } from "@/lib/ai/config";
 
 /**
  * jobParserAgent
@@ -26,9 +27,7 @@ export const jobParserAgent = new Agent({
   id: "job-parser-agent",
   name: "Job Parser Agent",
 
-  // AI SDK v5 model — required for Mastra's current generate() API.
-  // Reads ANTHROPIC_API_KEY from the environment automatically.
-  model: anthropic("claude-sonnet-4-5-20250929"),
+  model: ({ requestContext }) => resolveRuntimeModelFromContext(requestContext),
 
   instructions: `
 You are an expert job posting analyst. Your sole responsibility is to parse 
@@ -108,14 +107,16 @@ hourly rates to annual (multiply by 2080). Set currency as an ISO 4217 code.
  * @param jobPostingText - Raw text pasted from a job posting
  * @returns Parsed and validated JobPosting object
  */
-export async function parseJobPosting(jobPostingText: string) {
+export async function parseJobPosting(jobPostingText: string, aiConfig: ResolvedAiConfig) {
   const hardenedPrompt = `
 Parse the job posting text into the output schema.
 
 ${wrapUntrustedText("job_posting", jobPostingText)}
 `.trim();
 
+  const requestContext = createAiRequestContext(aiConfig);
   const result = await jobParserAgent.generate([{ role: "user", content: hardenedPrompt }], {
+    requestContext,
     structuredOutput: {
       schema: JobPostingSchema,
     },

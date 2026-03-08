@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { evaluateCandidates } from "@/lib/mastra/workflows/evaluateCandidatesWorkflow";
 import { validateJobPostingText } from "@/lib/validation/inputGuards";
-import { requireAnthropicApiKey } from "@/lib/api/preflight";
+import { requireAiConfig } from "@/lib/api/preflight";
 
 /**
  * POST /api/parse
@@ -17,8 +17,9 @@ import { requireAnthropicApiKey } from "@/lib/api/preflight";
  */
 export async function POST(req: NextRequest) {
   try {
-    const apiKeyError = requireAnthropicApiKey();
-    if (apiKeyError) return apiKeyError;
+    const { aiConfig, errorResponse } = requireAiConfig(req);
+    if (errorResponse) return errorResponse;
+    if (!aiConfig) throw new Error("AI config preflight failed.");
 
     const body = await req.json();
     const { jobPostingText } = body;
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest) {
     const result = await evaluateCandidates({
       operation: "parseJob",
       jobPostingText,
+      aiConfig,
     });
 
     if (!result.jobPosting) {
@@ -43,6 +45,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, data: result.jobPosting }, { status: 200 });
   } catch (err) {
+    console.error("[parse] Unexpected error:", err);
     const message = err instanceof Error ? err.message : "An unexpected error occurred.";
     console.error("[parse] Error:", message);
     return NextResponse.json({ success: false, error: message }, { status: 500 });

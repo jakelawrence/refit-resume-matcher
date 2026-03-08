@@ -1,12 +1,13 @@
 import { Agent } from "@mastra/core/agent";
-import { anthropic } from "@ai-sdk/anthropic";
 import { StructuredResumeSchema, type StructuredResume } from "@/types/structuredResume";
 import { wrapUntrustedText } from "@/lib/mastra/promptHardening";
+import { resolveRuntimeModelFromContext, createAiRequestContext } from "@/lib/mastra/aiRuntime";
+import type { ResolvedAiConfig } from "@/lib/ai/config";
 
 export const resumeStructurerAgent = new Agent({
   id: "resume-structurer-agent",
   name: "Resume Structurer Agent",
-  model: anthropic("claude-sonnet-4-5-20250929"),
+  model: ({ requestContext }) => resolveRuntimeModelFromContext(requestContext),
   instructions: `
 You are an expert resume analyst.
 
@@ -187,14 +188,17 @@ function normalizeStructuredResume(raw: unknown): StructuredResume {
   return normalized;
 }
 
-export async function parseResumeToStructured(resumeText: string) {
+export async function parseResumeToStructured(resumeText: string, aiConfig: ResolvedAiConfig) {
   const hardenedPrompt = `
 Parse this resume text into the schema.
 
 ${wrapUntrustedText("resume", resumeText)}
 `.trim();
 
-  const result = await resumeStructurerAgent.generate([{ role: "user", content: hardenedPrompt }]);
+  const requestContext = createAiRequestContext(aiConfig);
+  const result = await resumeStructurerAgent.generate([{ role: "user", content: hardenedPrompt }], {
+    requestContext,
+  });
   const parsed = extractJsonObject(result.text);
   const normalized = normalizeStructuredResume(parsed);
   return StructuredResumeSchema.parse(normalized);

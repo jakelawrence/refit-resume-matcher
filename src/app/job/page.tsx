@@ -1,15 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { DEFAULT_MODEL_BY_PROVIDER, type AiProvider } from "@/lib/ai/config";
+import { AiSettingsModal } from "@/components/AiSettingsModal";
+import { getAiRequestHeaders, getDefaultClientAiConfig, loadClientAiConfig, saveClientAiConfig, type ClientAiConfig } from "@/lib/client/aiConfig";
 
 export default function HomePage() {
   const router = useRouter();
   const [jobText, setJobText] = useState("");
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiConfig, setAiConfig] = useState<ClientAiConfig>(getDefaultClientAiConfig());
   const charCount = jobText.length;
   const isReady = jobText.trim().length >= 50;
+
+  useEffect(() => {
+    const config = loadClientAiConfig();
+    setAiConfig(config);
+  }, []);
+
+  function updateProvider(provider: AiProvider) {
+    const next: ClientAiConfig = {
+      provider,
+      model: DEFAULT_MODEL_BY_PROVIDER[provider],
+    };
+    setAiConfig(next);
+    saveClientAiConfig(next);
+  }
 
   async function handleSubmit() {
     if (!isReady || isAnalysing) return;
@@ -19,7 +37,7 @@ export default function HomePage() {
     try {
       const res = await fetch("/api/parse", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAiRequestHeaders(aiConfig) },
         body: JSON.stringify({ jobPostingText: jobText }),
       });
 
@@ -29,8 +47,7 @@ export default function HomePage() {
         throw new Error(json.error ?? "Failed to analyse job posting.");
       }
 
-      const selectedResumeIdsRaw =
-        sessionStorage.getItem("selectedResumeIds") ?? localStorage.getItem("selectedResumeIds");
+      const selectedResumeIdsRaw = sessionStorage.getItem("selectedResumeIds") ?? localStorage.getItem("selectedResumeIds");
       if (!selectedResumeIdsRaw) {
         throw new Error("No selected résumés found. Please return to Step 1.");
       }
@@ -47,7 +64,7 @@ export default function HomePage() {
 
       const scoreRes = await fetch("/api/score", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAiRequestHeaders(aiConfig) },
         body: JSON.stringify({
           jobPosting: json.data,
           resumeIds: selectedResumeIds,
@@ -77,9 +94,12 @@ export default function HomePage() {
       <div className="layout">
         {/* Header */}
         <header className="header">
-          <div className="wordmark">
-            <span className="wordmark-re">re</span>
-            <span className="wordmark-fit">fit</span>
+          <div className="header-top">
+            <div className="wordmark">
+              <span className="wordmark-re">re</span>
+              <span className="wordmark-fit">fit</span>
+            </div>
+            <AiSettingsModal aiConfig={aiConfig} onProviderChange={updateProvider} disabled={isAnalysing} />
           </div>
           <p className="tagline">Resume intelligence, tailored to the job.</p>
         </header>
@@ -164,6 +184,11 @@ export default function HomePage() {
           {/* Decorative accent */}
           <div className="card-accent" aria-hidden="true" />
         </section>
+        <div className="footer-actions">
+          <button className="action-btn action-btn--secondary" onClick={() => router.push("/upload")}>
+            ← Back to résumés
+          </button>
+        </div>
 
         {/* Feature pills */}
         <footer className="features">
@@ -239,6 +264,7 @@ export default function HomePage() {
           flex-direction: column;
           gap: 6px;
         }
+        .header-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
         .wordmark {
           font-family: var(--serif);
@@ -333,6 +359,104 @@ export default function HomePage() {
           line-height: 1.6;
           color: var(--ink-2);
           max-width: 520px;
+        }
+
+        .action-btn {
+          padding: 13px 24px; border-radius: var(--radius);
+          font-family: var(--sans); font-size: 14px; font-weight: 600;
+          cursor: pointer; transition: all 0.2s;
+        }
+        .action-btn--secondary {
+          background: #fff; color: var(--ink-2);
+          border: 1px solid var(--border);
+        }
+        .action-btn--secondary:hover {
+          border-color: var(--ink-2); color: var(--ink);
+        }
+
+        .ai-gear-btn {
+          width: 36px;
+          height: 36px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid var(--border);
+          background: rgba(255,255,255,0.8);
+          border-radius: 999px;
+          color: var(--ink-2);
+          cursor: pointer;
+        }
+        .ai-gear-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .ai-modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.42);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+          z-index: 50;
+        }
+        .ai-modal {
+          width: min(420px, 100%);
+          background: #fff;
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          padding: 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          box-shadow: 0 14px 40px rgba(0,0,0,0.18);
+        }
+        .ai-modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .ai-modal-title {
+          font-family: var(--serif);
+          font-size: 24px;
+          line-height: 1;
+        }
+        .ai-close-btn {
+          border: none;
+          background: transparent;
+          color: var(--ink-3);
+          font-size: 24px;
+          line-height: 1;
+          cursor: pointer;
+        }
+        .ai-field { display: grid; gap: 6px; }
+        .ai-label {
+          font-family: var(--mono);
+          font-size: 11px;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--ink-3);
+        }
+        .ai-select {
+          width: 100%;
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          background: #fff;
+          color: var(--ink);
+          font-family: var(--sans);
+          font-size: 13px;
+          padding: 10px 12px;
+        }
+        .ai-select:focus {
+          outline: none;
+          border-color: var(--accent);
+          box-shadow: 0 0 0 3px var(--accent-dim);
+        }
+        .ai-helper {
+          font-size: 12px;
+          color: var(--ink-2);
+          line-height: 1.5;
+        }
+        .ai-helper code {
+          font-family: var(--mono);
+          font-size: 11px;
         }
 
         /* ── Textarea ───────────────────────────────────────── */

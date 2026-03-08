@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import { extractPdfText, getParsedResumeById, RESUMES_DIR } from "@/lib/resumes/storage";
 import { validateResumeText } from "@/lib/validation/inputGuards";
-import { requireAnthropicApiKey } from "@/lib/api/preflight";
+import { requireAiConfig } from "@/lib/api/preflight";
 import { saveLatestRunState } from "@/lib/runState/storage";
 
 export const runtime = "nodejs";
@@ -33,8 +33,9 @@ export const runtime = "nodejs";
  */
 export async function POST(req: NextRequest) {
   try {
-    const apiKeyError = requireAnthropicApiKey();
-    if (apiKeyError) return apiKeyError;
+    const { aiConfig, errorResponse } = requireAiConfig(req);
+    if (errorResponse) return errorResponse;
+    if (!aiConfig) throw new Error("AI config preflight failed.");
 
     const body = await req.json();
     console.log("[score-resumes] Received request with body:", body);
@@ -110,6 +111,7 @@ export async function POST(req: NextRequest) {
       jobPosting: parsed.data.jobPosting,
       resumes: parsed.data.resumes,
       threshold: parsed.data.threshold,
+      aiConfig,
     });
 
     if (!workflowResult.scoringResult) {

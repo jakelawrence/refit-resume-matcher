@@ -1,7 +1,12 @@
 import { Agent } from "@mastra/core/agent";
-import { anthropic } from "@ai-sdk/anthropic";
-import { ScorerModelOutputSchema, type ScorerInput } from "@/types/resumeScore";
+import { ScorerModelOutputSchema, type ResumeScore, type ScorerInput } from "@/types/resumeScore";
 import { wrapUntrustedText } from "@/lib/mastra/promptHardening";
+import { resolveRuntimeModelFromContext, createAiRequestContext } from "@/lib/mastra/aiRuntime";
+import type { ResolvedAiConfig } from "@/lib/ai/config";
+
+type ScorerRuntimeInput = ScorerInput & {
+  aiConfig: ResolvedAiConfig;
+};
 
 // ─── Agent Definition ──────────────────────────────────────────────────────────
 // No changes to the Agent itself — system instructions live here and are
@@ -9,10 +14,7 @@ import { wrapUntrustedText } from "@/lib/mastra/promptHardening";
 export const resumeScorerAgent = new Agent({
   id: "resume-scorer-agent",
   name: "Resume Scorer Agent",
-  // IMPROVEMENT 1 (Speed): Keep claude-sonnet-4-5 — it's the right balance of
-  // speed vs quality for structured scoring. Avoid opus here; it's ~3x slower
-  // for marginal gains on a rubric-following task.
-  model: anthropic("claude-sonnet-4-5-20250929"),
+  model: ({ requestContext }) => resolveRuntimeModelFromContext(requestContext),
 
   instructions: `
 You are an expert technical recruiter and resume evaluator. Your job is to
@@ -129,8 +131,9 @@ function computeCompositeScore(scores: {
 }
 
 // ─── Score resumes in parallel ──────────────────────────────────────────────────
-export async function scoreResumes(input: ScorerInput) {
-  const { jobPosting, resumes, threshold = 70 } = input;
+export async function scoreResumes(input: ScorerRuntimeInput) {
+  const { jobPosting, resumes, threshold = 70, aiConfig } = input;
+  const requestContext = createAiRequestContext(aiConfig);
 
   // IMPROVEMENT 3 (Speed): Score each resume as its own independent request
   // and run them all in parallel with Promise.all. With 5 resumes, this is
@@ -165,6 +168,7 @@ Then produce the structured output.
 
     return resumeScorerAgent
       .generate([{ role: "user", content: prompt }], {
+        requestContext,
         structuredOutput: { schema: ScorerModelOutputSchema },
       })
       .then((result) => {
@@ -174,7 +178,7 @@ Then produce the structured output.
         // with the deterministic calculation. Also enforce meetsThreshold
         // here rather than trusting the model output.
         if (scored && scored.scores?.length > 0) {
-          scored.scores = scored.scores.map((s: any) => ({
+          scored.scores = scored.scores.map((s) => ({
             ...s,
             compositeScore: computeCompositeScore(s),
             meetsThreshold: computeCompositeScore(s) >= threshold,
@@ -189,7 +193,7 @@ Then produce the structured output.
   // parse doesn't tank the entire batch. Log failures but return the rest.
   const results = await Promise.allSettled(scoringPromises);
 
-  const successfulScores: any[] = [];
+  const successfulScores: ResumeScore[] = [];
   const errors: { resumeId: string; error: string }[] = [];
 
   results.forEach((result, i) => {

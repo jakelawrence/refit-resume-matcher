@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import { ensureResumesDir, extractPdfText, RESUMES_DIR, upsertParsedResume } from "@/lib/resumes/storage";
 import { validateResumeText } from "@/lib/validation/inputGuards";
-import { requireAnthropicApiKey } from "@/lib/api/preflight";
+import { requireAiConfig } from "@/lib/api/preflight";
 import { parseResumeToStructured } from "@/lib/mastra/agents/resumeStructurerAgent";
 
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -21,8 +21,9 @@ export async function POST(req: NextRequest) {
   let savedPdfPath: string | null = null;
 
   try {
-    const apiKeyError = requireAnthropicApiKey();
-    if (apiKeyError) return apiKeyError;
+    const { aiConfig, errorResponse } = requireAiConfig(req);
+    if (errorResponse) return errorResponse;
+    if (!aiConfig) throw new Error("AI config preflight failed.");
 
     console.log("[upload] Received upload request");
     ensureResumesDir();
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: resumeTextError }, { status: 400 });
     }
 
-    const structured = await parseResumeToStructured(text);
+    const structured = await parseResumeToStructured(text, aiConfig);
 
     const uploadedAt = new Date().toISOString();
     const storedResume = {

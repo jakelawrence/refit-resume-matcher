@@ -6,6 +6,7 @@ import { scoreResumes } from "@/lib/mastra/agents/resumeScorerAgent";
 import { JobPostingSchema } from "@/types/jobPosting";
 import { ScorerModelOutputSchema, ScorerOutputSchema, ResumeInputSchema } from "@/types/resumeScore";
 import { StructuredResumeSchema } from "@/types/structuredResume";
+import { ResolvedAiConfigSchema } from "@/lib/ai/config";
 
 const SCORE_WEIGHTS = {
   skills: 0.4,
@@ -31,10 +32,7 @@ function recomputeCompositeScore(score: z.infer<typeof ScorerOutputSchema>["scor
   const keywords = clampScore(score.keywordDensityScore);
 
   return roundTo1(
-    skills * SCORE_WEIGHTS.skills +
-      experience * SCORE_WEIGHTS.experience +
-      education * SCORE_WEIGHTS.education +
-      keywords * SCORE_WEIGHTS.keywords,
+    skills * SCORE_WEIGHTS.skills + experience * SCORE_WEIGHTS.experience + education * SCORE_WEIGHTS.education + keywords * SCORE_WEIGHTS.keywords,
   );
 }
 
@@ -74,6 +72,7 @@ const EvaluateCandidatesWorkflowInputSchema = z.object({
   jobPosting: JobPostingSchema.optional(),
   resumes: z.array(ResumeInputSchema).default([]),
   threshold: z.number().min(0).max(100).default(70),
+  aiConfig: ResolvedAiConfigSchema,
 });
 
 const ParsedResumesSchema = z.array(
@@ -88,6 +87,7 @@ const StepContextSchema = z.object({
   jobPosting: JobPostingSchema.nullable(),
   resumes: z.array(ResumeInputSchema),
   threshold: z.number(),
+  aiConfig: ResolvedAiConfigSchema,
 });
 
 const ScoredContextSchema = z.object({
@@ -95,6 +95,7 @@ const ScoredContextSchema = z.object({
   jobPosting: JobPostingSchema.nullable(),
   structuredResumes: ParsedResumesSchema,
   threshold: z.number(),
+  aiConfig: ResolvedAiConfigSchema,
   scoringResult: ScorerModelOutputSchema.nullable(),
 });
 
@@ -115,7 +116,7 @@ const parseJobStep = createStep({
     let jobPosting = inputData.jobPosting ?? null;
 
     if (!jobPosting && inputData.jobPostingText) {
-      jobPosting = await parseJobPosting(inputData.jobPostingText);
+      jobPosting = await parseJobPosting(inputData.jobPostingText, inputData.aiConfig);
     }
 
     if (requiresJob && !jobPosting) {
@@ -131,6 +132,7 @@ const parseJobStep = createStep({
       jobPosting,
       resumes: inputData.resumes,
       threshold: inputData.threshold,
+      aiConfig: inputData.aiConfig,
     };
   },
 });
@@ -152,7 +154,7 @@ const parseResumesStep = createStep({
       ? await Promise.all(
           inputData.resumes.map(async (resume) => ({
             id: resume.id,
-            structuredResume: await parseResumeToStructured(resume.text),
+            structuredResume: await parseResumeToStructured(resume.text, inputData.aiConfig),
           })),
         )
       : [];
@@ -162,6 +164,7 @@ const parseResumesStep = createStep({
       jobPosting: inputData.jobPosting,
       resumes: inputData.resumes,
       threshold: inputData.threshold,
+      aiConfig: inputData.aiConfig,
       structuredResumes,
     };
   },
@@ -174,6 +177,7 @@ const scoreResumesStep = createStep({
     jobPosting: JobPostingSchema.nullable(),
     resumes: z.array(ResumeInputSchema),
     threshold: z.number(),
+    aiConfig: ResolvedAiConfigSchema,
     structuredResumes: ParsedResumesSchema,
   }),
   outputSchema: ScoredContextSchema,
@@ -186,6 +190,7 @@ const scoreResumesStep = createStep({
         jobPosting: inputData.jobPosting,
         structuredResumes: inputData.structuredResumes,
         threshold: inputData.threshold,
+        aiConfig: inputData.aiConfig,
         scoringResult: null,
       };
     }
@@ -198,6 +203,7 @@ const scoreResumesStep = createStep({
       jobPosting: inputData.jobPosting,
       resumes: inputData.resumes,
       threshold: inputData.threshold,
+      aiConfig: inputData.aiConfig,
     });
 
     return {
@@ -205,6 +211,7 @@ const scoreResumesStep = createStep({
       jobPosting: inputData.jobPosting,
       structuredResumes: inputData.structuredResumes,
       threshold: inputData.threshold,
+      aiConfig: inputData.aiConfig,
       scoringResult,
     };
   },

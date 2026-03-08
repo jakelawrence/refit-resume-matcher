@@ -2,6 +2,15 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { DEFAULT_MODEL_BY_PROVIDER, type AiProvider } from "@/lib/ai/config";
+import { AiSettingsModal } from "@/components/AiSettingsModal";
+import {
+  getAiRequestHeaders,
+  getDefaultClientAiConfig,
+  loadClientAiConfig,
+  saveClientAiConfig,
+  type ClientAiConfig,
+} from "@/lib/client/aiConfig";
 
 interface StoredResume {
   id: string;
@@ -35,6 +44,7 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [continueError, setContinueError] = useState<string | null>(null);
+  const [aiConfig, setAiConfig] = useState<ClientAiConfig>(getDefaultClientAiConfig());
 
   // ── Load stored resumes ──────────────────────────────────────────────────
   const fetchResumes = useCallback(async () => {
@@ -54,6 +64,19 @@ export default function UploadPage() {
   useEffect(() => {
     fetchResumes();
   }, [fetchResumes]);
+
+  useEffect(() => {
+    setAiConfig(loadClientAiConfig());
+  }, []);
+
+  function updateProvider(provider: AiProvider) {
+    const next: ClientAiConfig = {
+      provider,
+      model: DEFAULT_MODEL_BY_PROVIDER[provider],
+    };
+    setAiConfig(next);
+    saveClientAiConfig(next);
+  }
 
   // ── Selection helpers ────────────────────────────────────────────────────
   function toggleSelect(id: string) {
@@ -96,6 +119,7 @@ export default function UploadPage() {
 
       const res = await fetch("/api/resumes/upload", {
         method: "POST",
+        headers: getAiRequestHeaders(aiConfig),
         body: form,
       });
       const json = await res.json();
@@ -152,10 +176,13 @@ export default function UploadPage() {
       <div className="layout">
         {/* Header */}
         <header className="header">
-          <button type="button" className="wordmark" onClick={() => router.push("/")} aria-label="Go to home">
-            <span className="wordmark-re">re</span>
-            <span className="wordmark-fit">fit</span>
-          </button>
+          <div className="header-top">
+            <button type="button" className="wordmark" onClick={() => router.push("/")} aria-label="Go to home">
+              <span className="wordmark-re">re</span>
+              <span className="wordmark-fit">fit</span>
+            </button>
+            <AiSettingsModal aiConfig={aiConfig} onProviderChange={updateProvider} disabled={uploading} />
+          </div>
           <p className="tagline">Resume intelligence, tailored to the job.</p>
         </header>
 
@@ -387,6 +414,7 @@ export default function UploadPage() {
 
         /* ── Header / wordmark ──────────────────────────────── */
         .header { display: flex; flex-direction: column; gap: 6px; }
+        .header-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
         .wordmark {
           font-family: var(--serif); font-size: 42px; font-weight: 700;
           letter-spacing: -1px; line-height: 1; cursor: pointer;
@@ -417,6 +445,90 @@ export default function UploadPage() {
         .step-connector {
           flex: 1; height: 1px; background: var(--border);
           margin: 0 16px; margin-bottom: 2px; min-width: 32px;
+        }
+        .ai-gear-btn {
+          width: 36px;
+          height: 36px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid var(--border);
+          background: rgba(255,255,255,0.8);
+          border-radius: 999px;
+          color: var(--ink-2);
+          cursor: pointer;
+        }
+        .ai-gear-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .ai-modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.42);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+          z-index: 50;
+        }
+        .ai-modal {
+          width: min(420px, 100%);
+          background: #fff;
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          padding: 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          box-shadow: 0 14px 40px rgba(0,0,0,0.18);
+        }
+        .ai-modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .ai-modal-title {
+          font-family: var(--serif);
+          font-size: 24px;
+          line-height: 1;
+        }
+        .ai-close-btn {
+          border: none;
+          background: transparent;
+          color: var(--ink-3);
+          font-size: 24px;
+          line-height: 1;
+          cursor: pointer;
+        }
+        .ai-field { display: grid; gap: 6px; }
+        .ai-label {
+          font-family: var(--mono);
+          font-size: 11px;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--ink-3);
+        }
+        .ai-select {
+          width: 100%;
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          background: #fff;
+          color: var(--ink);
+          font-family: var(--sans);
+          font-size: 13px;
+          padding: 10px 12px;
+        }
+        .ai-select:focus {
+          outline: none;
+          border-color: var(--accent);
+          box-shadow: 0 0 0 3px var(--accent-dim);
+        }
+        .ai-helper {
+          font-size: 12px;
+          color: var(--ink-2);
+          line-height: 1.5;
+        }
+        .ai-helper code {
+          font-family: var(--mono);
+          font-size: 11px;
         }
 
         /* ── Drop zone ──────────────────────────────────────── */
